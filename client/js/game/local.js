@@ -12,7 +12,7 @@ import {
   passAfterDraw,
   playCard,
 } from '../../../shared/rules.js';
-import { DIFFICULTY, chooseMove } from '../ai/ai.js';
+import { DIFFICULTY, chooseMove } from '../../../shared/ai.js';
 
 const AI_NAMES = ['电脑 A', '电脑 B', '电脑 C'];
 const HUMAN_SEAT = 0;

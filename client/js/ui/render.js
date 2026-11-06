@@ -40,33 +40,57 @@ export function createView({ onPlay, onDraw, onPass, notify }) {
 
   /* ------------------------------ 对手席位 ------------------------------ */
 
+  /** 联机视图里别人的手牌只下发张数，单机视图则是真实手牌 */
+  function handSizeOf(player) {
+    return player.handCount ?? player.hand?.length ?? 0;
+  }
+
   function renderOpponents(state, humanSeat) {
     const fragment = document.createDocumentFragment();
 
     state.players.forEach((player, index) => {
       if (index === humanSeat) return;
 
-      const seat = document.createElement('div');
       const active = state.currentPlayer === index && state.phase !== PHASE.FINISHED;
+      const seat = document.createElement('div');
       seat.className = active ? 'seat seat--active' : 'seat';
+      seat.dataset.seat = String(index);
 
-      const initial = player.name.trim().slice(-1);
-      const shown = Math.min(player.hand.length, 6);
-      const minis = Array.from({ length: shown }, () => '<span class="mini"></span>').join('');
-      const more =
-        player.hand.length > shown
-          ? `<span class="mini mini--more">+${player.hand.length - shown}</span>`
-          : '';
+      const avatar = document.createElement('div');
+      avatar.className = 'seat__avatar';
+      // 昵称是玩家输入的内容，一律走 textContent，绝不拼进 innerHTML
+      avatar.textContent = player.name.trim().slice(-1) || '?';
 
-      seat.innerHTML = `
-        <div class="seat__avatar">${initial}</div>
-        <div class="seat__meta">
-          <span class="seat__name">${player.name}</span>
-          <span class="seat__count">${player.hand.length} 张</span>
-        </div>
-        <div class="seat__mini">${minis}${more}</div>
-      `;
+      const meta = document.createElement('div');
+      meta.className = 'seat__meta';
 
+      const name = document.createElement('span');
+      name.className = 'seat__name';
+      name.textContent = player.name;
+
+      const count = document.createElement('span');
+      count.className = 'seat__count';
+      const total = handSizeOf(player);
+      count.textContent = player.abandoned ? `${total} 张 · 托管中` : `${total} 张`;
+
+      meta.append(name, count);
+
+      const minis = document.createElement('div');
+      minis.className = 'seat__mini';
+      const shown = Math.min(total, 6);
+      for (let i = 0; i < shown; i += 1) {
+        const mini = document.createElement('span');
+        mini.className = 'mini';
+        minis.append(mini);
+      }
+      if (total > shown) {
+        const more = document.createElement('span');
+        more.className = 'mini mini--more';
+        more.textContent = `+${total - shown}`;
+        minis.append(more);
+      }
+
+      seat.append(avatar, meta, minis);
       fragment.appendChild(seat);
     });
 
@@ -87,7 +111,7 @@ export function createView({ onPlay, onDraw, onPass, notify }) {
   }
 
   function renderTable(state, humanSeat) {
-    els.drawCount.textContent = String(state.drawPile.length);
+    els.drawCount.textContent = String(state.drawCount ?? state.drawPile.length);
     els.dirIcon.classList.toggle('is-ccw', state.direction === -1);
 
     const color = state.currentColor;
@@ -134,6 +158,7 @@ export function createView({ onPlay, onDraw, onPass, notify }) {
 
   function renderHand(state, humanSeat) {
     const player = state.players[humanSeat];
+    const hand = player?.hand ?? [];
     const myTurn = state.currentPlayer === humanSeat && state.phase !== PHASE.FINISHED;
     const ctx = { topCard: getTopCard(state), currentColor: state.currentColor };
 
@@ -142,7 +167,7 @@ export function createView({ onPlay, onDraw, onPass, notify }) {
       if (state.phase === PHASE.DRAWN) {
         playable = new Set([state.drawnCardId]);
       } else {
-        playable = new Set(getPlayableCards(player.hand, ctx).map((card) => card.id));
+        playable = new Set(getPlayableCards(hand, ctx).map((card) => card.id));
       }
     }
 
@@ -152,7 +177,7 @@ export function createView({ onPlay, onDraw, onPass, notify }) {
     const nodes = [];
     const alive = new Set();
 
-    for (const card of player.hand) {
+    for (const card of hand) {
       alive.add(card.id);
       let node = cardCache.get(card.id);
       if (!node) {
@@ -198,12 +223,17 @@ export function createView({ onPlay, onDraw, onPass, notify }) {
     }
 
     if (!myTurn) {
-      els.turnBanner.innerHTML = `<strong>${state.players[state.currentPlayer].name}</strong> 正在出牌…`;
+      els.turnBanner.replaceChildren();
+      const who = document.createElement('strong');
+      who.textContent = state.players[state.currentPlayer].name;
+      els.turnBanner.append(who, document.createTextNode(' 正在出牌…'));
       return;
     }
 
     if (state.phase === PHASE.DRAWN) {
-      const drawn = state.players[humanSeat].hand.find((c) => c.id === state.drawnCardId);
+      const drawn = (state.players[humanSeat].hand ?? []).find(
+        (c) => c.id === state.drawnCardId,
+      );
       els.turnBanner.innerHTML = drawn
         ? `摸到 <strong>${describeCard(drawn)}</strong>，可以打出或跳过`
         : '请选择是否打出刚摸到的牌';
@@ -279,7 +309,7 @@ export function createView({ onPlay, onDraw, onPass, notify }) {
     }
 
     const cardId = node.dataset.cardId;
-    const card = state.players[view.humanSeat].hand.find((item) => item.id === cardId);
+    const card = (state.players[view.humanSeat].hand ?? []).find((item) => item.id === cardId);
     if (!card) return;
 
     if (!view.playable.has(cardId)) {

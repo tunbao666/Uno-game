@@ -1,6 +1,9 @@
 /**
  * AI 对手决策。
  *
+ * 放在 shared/ 是因为服务端也要用：玩家断线超时后由服务端接管出牌（托管），
+ * 用的是同一份决策逻辑，避免"单机的电脑很聪明、托管后变傻"。
+ *
  * 三档难度：
  * - easy   随机出牌，不做任何保留，纯粹陪玩
  * - normal 优先出数字牌以保留功能牌；变色时选自己手上最多的颜色
@@ -11,8 +14,8 @@
  * { action: 'play', cardId, color } | { action: 'draw' } | { action: 'pass' }
  */
 
-import { CARD_TYPES, COLORS } from '../../../shared/constants.js';
-import { PHASE, getPlayableCards, getTopCard } from '../../../shared/rules.js';
+import { CARD_TYPES, COLORS } from './constants.js';
+import { PHASE, getPlayableCards, getTopCard } from './rules.js';
 
 export const DIFFICULTY = Object.freeze({
   EASY: 'easy',
