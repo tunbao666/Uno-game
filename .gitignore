@@ -27,3 +27,6 @@ coverage/
 # 临时文件
 *.tmp
 *.swp
+
+# 本地工作区数据（不纳入版本管理）
+.workbuddy/
