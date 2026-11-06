@@ -38,10 +38,24 @@ function sendText(res, status, text) {
   res.end(text);
 }
 
-async function handleHttp(req, res) {
+async function handleHttp(req, res, manager) {
   try {
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
     const pathname = decodeURIComponent(url.pathname);
+
+    // 健康检查：云平台（Render / Railway 等）用它判断实例是否可用。
+    // 不能用 / 代替，因为 / 是 302 重定向，部分平台会判定为不健康而反复重启。
+    if (pathname === '/healthz') {
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
+      res.end(
+        JSON.stringify({
+          status: 'ok',
+          rooms: manager?.rooms?.size ?? 0,
+          uptime: Math.round(process.uptime()),
+        }),
+      );
+      return;
+    }
 
     // 根路径要重定向到真实入口，否则页面里的相对路径（./css、./js）
     // 会以 / 为基准解析，导致样式与脚本全部 404
@@ -81,7 +95,7 @@ async function handleHttp(req, res) {
  */
 export function createUnoServer(options = {}) {
   const manager = new RoomManager(options);
-  const server = createServer(handleHttp);
+  const server = createServer((req, res) => handleHttp(req, res, manager));
   const wsServer = attachWebSocketServer(server, { path: '/ws' });
 
   /** @type {Set<object>} 所有活着的连接，用于心跳巡检 */
@@ -133,8 +147,19 @@ const isMain =
 
 if (isMain) {
   const app = createUnoServer();
-  app.listen().then(() => {
-    console.log(`UNO 已启动：http://localhost:${PORT}`);
-    console.log(`联机 WebSocket：ws://localhost:${PORT}/ws`);
+  app.listen().then((address) => {
+    const port = typeof address === 'object' && address ? address.port : PORT;
+    console.log(`UNO 已启动：http://localhost:${port}`);
+    console.log(`联机 WebSocket：ws://localhost:${port}/ws`);
   });
+
+  // 云平台重启 / 停止实例时发的是 SIGTERM，给一个短暂窗口把连接正常关掉，
+  // 否则进程被直接杀掉，客户端只会看到连接被重置。
+  const shutdown = (signal) => {
+    console.log(`收到 ${signal}，正在关闭服务…`);
+    app.close().then(() => process.exit(0));
+    setTimeout(() => process.exit(1), 8000).unref();
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
