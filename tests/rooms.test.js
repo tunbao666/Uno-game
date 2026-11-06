@@ -99,6 +99,70 @@ test('房间码不存在时给出明确提示', () => {
   manager.close();
 });
 
+test('同名玩家进不了同一个房间：牌桌上分不清谁是谁', () => {
+  const { manager, connect } = setup();
+  const { hostConn, code } = createRoom(manager, connect, { players: 1, names: ['小明'] });
+
+  const conn = connect();
+  manager.handle(conn, JSON.stringify({ t: 'join', code, name: '小明' }));
+
+  const error = conn.last('error');
+  assert.equal(error.code, 'NAME_TAKEN', '要带上机器可读的错误码，客户端据此聚焦输入框');
+  assert.match(error.message, /已经有人叫「小明」/);
+  assert.equal(conn.last('joined'), undefined, '重名时不能占座');
+
+  // 改成别的名字，同一条连接上重发就能进
+  manager.handle(conn, JSON.stringify({ t: 'join', code, name: '小红' }));
+  assert.equal(conn.last('joined').seat, 1, '改名后应当正常拿到座位');
+  assert.equal(hostConn.last('room').players.length, 2);
+
+  manager.close();
+});
+
+test('重名判定忽略大小写与全角半角差异', () => {
+  const { manager, connect } = setup();
+  const { hostConn, code } = createRoom(manager, connect, { players: 1, names: ['Alice'] });
+
+  for (const variant of ['alice', 'ALICE', 'Ａlice']) {
+    const conn = connect();
+    manager.handle(conn, JSON.stringify({ t: 'join', code, name: variant }));
+    assert.equal(conn.last('error').code, 'NAME_TAKEN', `${variant} 应当被认成同一个名字`);
+  }
+
+  const conn = connect();
+  manager.handle(conn, JSON.stringify({ t: 'join', code, name: 'Alice2' }));
+  assert.ok(conn.last('joined'), '只是像但不相同的名字应当放行');
+  assert.equal(hostConn.last('room').players.length, 2);
+
+  manager.close();
+});
+
+test('名字占用了别人的座位时才拦；人走了名字就释放', () => {
+  const { manager, connect } = setup();
+  const { code, others } = createRoom(manager, connect, { players: 2, names: ['小明', '小红'] });
+
+  // 小红离开后，名字应当空出来
+  manager.handle(others[0], JSON.stringify({ t: 'leave' }));
+
+  const conn = connect();
+  manager.handle(conn, JSON.stringify({ t: 'join', code, name: '小红' }));
+  assert.ok(conn.last('joined'), '空出来的名字应当可以再用');
+
+  manager.close();
+});
+
+test('不同房间之间名字互不干扰', () => {
+  const { manager, connect } = setup();
+  const first = createRoom(manager, connect, { players: 1, names: ['小明'] });
+
+  const host2 = connect();
+  manager.handle(host2, JSON.stringify({ t: 'create', name: '小明' }));
+  assert.ok(host2.last('joined'), '另一个房间用同名没问题');
+  assert.notEqual(host2.last('joined').code, first.code);
+
+  manager.close();
+});
+
 test('第二个玩家加入后，房主收到人数更新', () => {
   const { manager, connect } = setup();
   const { hostConn, others } = createRoom(manager, connect, { players: 2 });

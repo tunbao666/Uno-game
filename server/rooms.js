@@ -52,6 +52,15 @@ export function sanitizeName(raw) {
   return chars.join('') || '玩家';
 }
 
+/**
+ * 昵称查重用的归一化键。
+ * 忽略大小写与全半角差异：Alice / alice / Ａlice 在牌桌上是同一个名字，
+ * 光看花色根本分不清谁是谁。
+ */
+export function nameKey(raw) {
+  return sanitizeName(raw).normalize('NFKC').toLowerCase();
+}
+
 export class RoomManager {
   /**
    * @param {Partial<typeof ROOM_CONFIG>} options
@@ -198,8 +207,20 @@ export class RoomManager {
       return;
     }
 
+    // 同名玩家在牌桌上完全分不清谁是谁，进场就挡住
+    const name = sanitizeName(message.name);
+    const taken = room.players.find((item) => nameKey(item.name) === nameKey(name));
+    if (taken) {
+      this.#error(
+        connection,
+        `房间里已经有人叫「${taken.name}」了，换个名字吧`,
+        'NAME_TAKEN',
+      );
+      return;
+    }
+
     const seat = this.#lowestFreeSeat(room);
-    const player = this.#newPlayer(message.name, seat, false);
+    const player = this.#newPlayer(name, seat, false);
     player.connection = connection;
     room.players.push(player);
     room.updatedAt = Date.now();
@@ -746,7 +767,12 @@ export class RoomManager {
     this.#broadcast(room, { t: 'say', seat: player.seat, name: player.name, text });
   }
 
-  #error(connection, message) {
-    connection.sendJson({ t: 'error', message });
+  /**
+   * @param {object} connection
+   * @param {string} message 给玩家看的文案
+   * @param {string} [code] 机器可读的错误码，客户端据此做针对性处理
+   */
+  #error(connection, message, code) {
+    connection.sendJson(code ? { t: 'error', message, code } : { t: 'error', message });
   }
 }

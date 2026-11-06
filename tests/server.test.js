@@ -195,6 +195,35 @@ test('房间不存在时返回可读错误而不是断线', async (t) => {
   ws.close();
 });
 
+test('重名在真实链路上被拦住，同一连接改名后能进', async (t) => {
+  const app = createUnoServer();
+  const address = await app.listen(0);
+
+  t.after(async () => {
+    await app.close();
+  });
+
+  const { ws: wsA, client: a } = await openClient(address.port);
+  a.send({ t: 'create', name: '小明' });
+  const joinedA = await a.next('joined');
+
+  const { ws: wsB, client: b } = await openClient(address.port);
+  b.send({ t: 'join', code: joinedA.code, name: '小明' });
+
+  const error = await b.next('error');
+  assert.equal(error.code, 'NAME_TAKEN');
+  assert.match(error.message, /已经有人叫/);
+  assert.equal(wsB.readyState, WebSocket.OPEN, '重名不该把连接掐掉，否则改名重试要重连');
+
+  // 同一条连接上改名重发，应当直接进房
+  b.send({ t: 'join', code: joinedA.code, name: '小红' });
+  const joinedB = await b.next('joined');
+  assert.equal(joinedB.seat, 1);
+
+  wsA.close();
+  wsB.close();
+});
+
 test('结算后离开再重进：座位当场释放，不会顶着托管标记', async (t) => {
   const app = createUnoServer({ reserveMs: 500, autoPlayDelay: 20 });
   const address = await app.listen(0);

@@ -48,7 +48,7 @@ function clearSession() {
  * @param {(payload: object) => void} options.onJoined
  * @param {(text: string) => void} options.onNotice
  * @param {(payload: object) => void} options.onSay
- * @param {(text: string) => void} options.onError
+ * @param {(text: string, detail?: object) => void} options.onError
  * @param {(reason: string) => void} options.onKicked
  * @param {(status: string, attempt: number) => void} options.onStatus
  * @param {(state: object) => void} options.onFinish
@@ -92,12 +92,9 @@ export function createOnlineGame(options = {}) {
         net.send({ t: 'resume', code: session.code, token: session.token });
         return;
       }
-      if (intent?.type === 'create') {
-        net.send({ t: 'create', name: intent.name });
-      } else if (intent?.type === 'join') {
-        net.send({ t: 'join', code: intent.code, name: intent.name });
-      }
+      sendIntent();
     },
+
     onMessage: (message) => {
       if (disposed) return;
 
@@ -139,7 +136,7 @@ export function createOnlineGame(options = {}) {
         }
 
         case 'error': {
-          onError?.(message.message);
+          onError?.(message.message, message);
           break;
         }
 
@@ -171,6 +168,25 @@ export function createOnlineGame(options = {}) {
     }
   }
 
+  /** 把当前意图（建房 / 进房）发出去 */
+  function sendIntent() {
+    if (intent?.type === 'create') {
+      net.send({ t: 'create', name: intent.name });
+    } else if (intent?.type === 'join') {
+      net.send({ t: 'join', code: intent.code, name: intent.name });
+    }
+  }
+
+  /**
+   * 连接已经开着就直接发，否则等 onOpen 里补发。
+   * 少了这一条，改名重试时（上一条 join 已被服务端拒绝）点了按钮什么都不会发生：
+   * connect() 看到连接是 OPEN 就直接返回，join 永远发不出去。
+   */
+  function requestIntent() {
+    if (net.isOpen) sendIntent();
+    else net.connect();
+  }
+
   return {
     /* -------------------------- 与单机一致的接口 -------------------------- */
 
@@ -197,13 +213,13 @@ export function createOnlineGame(options = {}) {
     createRoom(name) {
       intent = { type: 'create', name };
       session = null;
-      net.connect();
+      requestIntent();
     },
 
     joinRoom(code, name) {
       intent = { type: 'join', code, name };
       session = null;
-      net.connect();
+      requestIntent();
     },
 
     /** 页面加载时尝试恢复上次未打完的座位 */

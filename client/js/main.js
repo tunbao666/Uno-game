@@ -227,8 +227,14 @@ function ensureOnline() {
 
     onSay: (message) => pushFeed(message.name, message.text),
 
-    onError: (text) => {
+    onError: (text, detail) => {
       notify(text);
+      // 名字被占了：光标放回输入框并全选，改个字就能直接再点一次
+      if (detail?.code === 'NAME_TAKEN') {
+        ui.inputName.focus();
+        ui.inputName.select();
+        return;
+      }
       if (/房间已关闭|座位已被释放/.test(text)) {
         leaveOnline({ silent: true });
       }
