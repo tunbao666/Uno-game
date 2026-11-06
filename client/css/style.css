@@ -855,6 +855,193 @@ button {
 .color-btn--green { background: var(--green); }
 .color-btn--blue { background: var(--blue); }
 
+/* ------------------------------ 规则说明 ------------------------------ */
+
+.link-btn {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+  padding: 4px;
+  border: 0;
+  background: none;
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.link-btn:hover {
+  color: var(--ink);
+}
+
+.modal__card--wide {
+  width: min(560px, 100%);
+  max-height: min(86vh, 760px);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.rules__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 22px 24px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.rules__head .modal__title {
+  margin-bottom: 0;
+}
+
+.rules__body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 24px 20px;
+}
+
+/* 还有内容未滚出时，底部渐隐提示 */
+.rules__body.has-more {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
+}
+
+.rules__body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.rules__body::-webkit-scrollbar-thumb {
+  background: #ded8ca;
+  border-radius: 999px;
+}
+
+.rules__body::-webkit-scrollbar-thumb:hover {
+  background: #cbc3b1;
+}
+
+.rules__section {
+  padding: 14px 0 4px;
+}
+
+.rules__section + .rules__section {
+  border-top: 1px dashed var(--line);
+}
+
+.rules__h3 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.rules__lead,
+.rules__desc {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: #4a463f;
+}
+
+.rules__steps,
+.rules__notes {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.rules__steps {
+  padding-left: 18px;
+}
+
+.rules__notes {
+  padding-left: 0;
+  list-style: none;
+}
+
+.rules__steps li,
+.rules__notes li {
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: #4a463f;
+}
+
+.rules__notes li {
+  position: relative;
+  padding-left: 14px;
+}
+
+.rules__notes li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #cfc8b8;
+}
+
+.rules__steps strong,
+.rules__notes strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* 牌型行：左侧真实卡面，右侧名称与说明 */
+.rules__row {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 14px;
+  align-items: center;
+  padding: 9px 0;
+}
+
+.rules__row + .rules__row {
+  border-top: 1px solid #f1ece1;
+}
+
+.rules__mini {
+  --card-w: 40px;
+  display: grid;
+  place-items: center;
+}
+
+.rules__name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 2px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.rules__count {
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.rules__foot {
+  padding: 14px 24px 20px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.rules__foot .btn--block {
+  margin-top: 0;
+}
+
 /* -------------------------------- 提示 --------------------------------- */
 
 .toast {
@@ -929,6 +1116,31 @@ button {
 
   .modal__title {
     font-size: 22px;
+  }
+
+  .modal__card--wide {
+    max-height: 92vh;
+  }
+
+  .rules__head {
+    padding: 18px 18px 12px;
+  }
+
+  .rules__body {
+    padding: 2px 18px 16px;
+  }
+
+  .rules__foot {
+    padding: 12px 18px 16px;
+  }
+
+  .rules__row {
+    grid-template-columns: 38px 1fr;
+    gap: 12px;
+  }
+
+  .rules__mini {
+    --card-w: 36px;
   }
 }
 

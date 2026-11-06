@@ -6,6 +6,7 @@ import { CARD_TYPES } from '../../shared/constants.js';
 import { PHASE } from '../../shared/rules.js';
 import { createLocalGame } from './game/local.js';
 import { createView } from './ui/render.js';
+import { mountRules, syncRulesFade } from './ui/rules.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -16,6 +17,8 @@ const ui = {
   overKicker: $('overKicker'),
   overTitle: $('overTitle'),
   overText: $('overText'),
+  rulesModal: $('rulesModal'),
+  rulesBody: $('rulesBody'),
   toast: $('toast'),
   logPanel: $('logPanel'),
 };
@@ -29,6 +32,24 @@ let game = null;
 let pendingWildCard = null;
 let finishHandled = false;
 let toastTimer = null;
+
+/* ------------------------------ 规则说明 ------------------------------ */
+
+const rules = {
+  open() {
+    // 首次打开才构建内容，之后复用同一份 DOM
+    mountRules(ui.rulesBody);
+    ui.rulesModal.hidden = false;
+    // 显示后才能量出真实高度，下一帧再判断要不要加底部渐隐
+    requestAnimationFrame(() => syncRulesFade(ui.rulesBody));
+  },
+  close() {
+    ui.rulesModal.hidden = true;
+  },
+  get isOpen() {
+    return !ui.rulesModal.hidden;
+  },
+};
 
 /* -------------------------------- 提示 -------------------------------- */
 
@@ -79,6 +100,7 @@ function startGame() {
   ui.setupModal.hidden = true;
   ui.overModal.hidden = true;
   ui.colorModal.hidden = true;
+  ui.rulesModal.hidden = true;
 
   view.reset();
 
@@ -156,6 +178,18 @@ $('btnCancelColor').addEventListener('click', () => {
   ui.colorModal.hidden = true;
 });
 
+/* ------------------------------ 规则说明 ------------------------------ */
+
+$('btnRules').addEventListener('click', () => rules.open());
+$('btnRulesSetup').addEventListener('click', () => rules.open());
+$('btnRulesClose').addEventListener('click', () => rules.close());
+$('btnRulesOk').addEventListener('click', () => rules.close());
+
+// 点遮罩空白处也能关掉
+ui.rulesModal.addEventListener('click', (event) => {
+  if (event.target === ui.rulesModal) rules.close();
+});
+
 /* -------------------------------- 日志 -------------------------------- */
 
 $('btnLog').addEventListener('click', () => ui.logPanel.classList.toggle('is-open'));
@@ -175,6 +209,10 @@ window.addEventListener('resize', () => {
 
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
+    if (rules.isOpen) {
+      rules.close();
+      return;
+    }
     if (!ui.colorModal.hidden) {
       pendingWildCard = null;
       ui.colorModal.hidden = true;
