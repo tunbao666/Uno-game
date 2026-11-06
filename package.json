@@ -1,6 +1,6 @@
 {
   "name": "uno-game",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "网页版 UNO 四人小游戏（单机人机 + 房间码联机）",
   "type": "module",
