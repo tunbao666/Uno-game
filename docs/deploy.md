@@ -89,6 +89,16 @@ GitHub Pages 只能托管**静态文件**（HTML / CSS / JS），它没有可以
 
 前提是 `cloudflared` 已安装（见下方步骤 1），本机已装好。
 
+脚本会依次在三个地方找 Node.js：系统 PATH → WorkBuddy 自带目录 → 常见安装位置（`C:\Program Files\nodejs` 等）。都找不到才会报错并给安装指引，不会因为 Node 没进 PATH 就直接失败。
+
+想先确认环境是否齐备、又不想真的开服务，可以在命令行里跑一次自检：
+
+```bash
+start-public.bat --check
+```
+
+只打印找到的 Node.js 和 cloudflared 路径，然后退出。
+
 ### 手动方式（三行命令）
 
 如果脚本出问题，就手动开三个终端窗口。
@@ -107,6 +117,14 @@ winget install --id Cloudflare.cloudflared
 cd D:\AI_workspace\web_game
 npm start
 ```
+
+如果这一步提示 `'node' 不是内部或外部命令` 或 `没找到 node`，说明 Node.js 没装、或装了但没进 PATH。先装一遍：
+
+```bash
+winget install OpenJS.NodeJS.LTS
+```
+
+装完关掉终端重开。注意：**手动方式同样依赖 Node.js 在 PATH 里**，它不是绕过「找不到 node」的办法，只是绕过 bat 脚本。
 
 这个窗口要一直开着，关掉游戏就没了。
 
