@@ -1,0 +1,29 @@
+# 依赖
+node_modules/
+package-lock.json.bak
+
+# 环境变量与密钥
+.env
+.env.local
+.env.*.local
+
+# 日志
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# 编辑器与系统文件
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 构建产物与测试覆盖率
+dist/
+build/
+coverage/
+
+# 临时文件
+*.tmp
+*.swp
