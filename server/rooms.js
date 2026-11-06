@@ -28,6 +28,13 @@ export const ROOM_CONFIG = Object.freeze({
   phraseMaxLength: 30,
   /** 全员离线多久后回收房间 */
   roomIdleMs: 10 * 60_000,
+  /**
+   * 全局房间数上限。
+   * 公网开放后，任何人都能不带成本地建房，而房间全在内存里；
+   * 没有这个上限，一个循环脚本就能把进程内存吃满。
+   * 200 个房间够几百人同时玩，正常使用永远碰不到。
+   */
+  maxRooms: 200,
 });
 
 /** 断线/错误提示里给玩家看的文案 */
@@ -137,6 +144,11 @@ export class RoomManager {
   /* -------------------------------- 房间 -------------------------------- */
 
   #create(connection, message) {
+    if (this.rooms.size >= this.config.maxRooms) {
+      this.#error(connection, '服务器房间已满，过几分钟再试');
+      return;
+    }
+
     const room = {
       code: this.#newCode(),
       players: [],

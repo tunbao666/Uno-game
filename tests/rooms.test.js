@@ -318,3 +318,21 @@ test('对局结束时给出赢家提示，房主可以再来一局', () => {
 
   manager.close();
 });
+
+test('房间数达到上限时拒绝新建，避免被脚本刷爆内存', () => {
+  const { manager, connect } = setup({ maxRooms: 3 });
+
+  for (let i = 0; i < 3; i += 1) {
+    const connection = connect();
+    manager.handle(connection, JSON.stringify({ t: 'create', name: `房主${i}` }));
+    assert.ok(connection.last('joined'), `第 ${i + 1} 个房间应当建成`);
+  }
+
+  const extra = connect();
+  manager.handle(extra, JSON.stringify({ t: 'create', name: '多余的' }));
+  assert.match(extra.last('error').message, /房间已满/);
+  assert.equal(extra.last('joined'), undefined, '超额时不应拿到房间');
+  assert.equal(manager.rooms.size, 3, '房间数不能越过上限');
+
+  manager.close();
+});
