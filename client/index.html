@@ -11,12 +11,15 @@
     <header class="topbar">
       <div class="brand">
         <span class="brand__logo">UNO</span>
-        <span class="brand__sub">单机 · 人机对战</span>
+        <span class="brand__sub" id="brandSub">单机 · 人机对战</span>
+        <span class="room-chip" id="roomChip" hidden>房间 <b id="roomChipCode">0000</b></span>
       </div>
       <div class="topbar__actions">
+        <button class="btn btn--ghost" id="btnPhrases" type="button" hidden>快捷短语</button>
         <button class="btn btn--ghost" id="btnRules" type="button">规则说明</button>
         <button class="btn btn--ghost" id="btnLog" type="button">对局日志</button>
         <button class="btn btn--ghost" id="btnRestart" type="button">重新开局</button>
+        <button class="btn btn--ghost" id="btnLeaveRoom" type="button" hidden>离开房间</button>
       </div>
     </header>
 
@@ -81,24 +84,66 @@
       <p class="modal__sub">经典 108 张牌组，精简规则，先出完手牌者获胜。</p>
 
       <div class="opt">
-        <span class="opt__legend">玩家人数</span>
-        <div class="seg" id="optPlayers">
-          <button type="button" data-value="2">2 人</button>
-          <button type="button" data-value="3">3 人</button>
-          <button type="button" data-value="4" class="is-active">4 人</button>
+        <span class="opt__legend">玩法</span>
+        <div class="seg" id="optMode">
+          <button type="button" data-value="local" class="is-active">单机人机</button>
+          <button type="button" data-value="online">联机对战</button>
         </div>
       </div>
 
-      <div class="opt">
-        <span class="opt__legend">AI 难度</span>
-        <div class="seg" id="optDifficulty">
-          <button type="button" data-value="easy">简单</button>
-          <button type="button" data-value="normal" class="is-active">普通</button>
-          <button type="button" data-value="hard">困难</button>
+      <div id="localOptions">
+        <div class="opt">
+          <span class="opt__legend">玩家人数</span>
+          <div class="seg" id="optPlayers">
+            <button type="button" data-value="2">2 人</button>
+            <button type="button" data-value="3">3 人</button>
+            <button type="button" data-value="4" class="is-active">4 人</button>
+          </div>
+        </div>
+
+        <div class="opt">
+          <span class="opt__legend">AI 难度</span>
+          <div class="seg" id="optDifficulty">
+            <button type="button" data-value="easy">简单</button>
+            <button type="button" data-value="normal" class="is-active">普通</button>
+            <button type="button" data-value="hard">困难</button>
+          </div>
+        </div>
+
+        <button class="btn btn--primary btn--block" id="btnStart" type="button">开始游戏</button>
+      </div>
+
+      <div id="onlineOptions" hidden>
+        <div class="opt">
+          <span class="opt__legend">你的昵称</span>
+          <input
+            class="field"
+            id="inputName"
+            type="text"
+            maxlength="8"
+            placeholder="最多 8 个字"
+            autocomplete="off"
+          />
+        </div>
+
+        <button class="btn btn--primary btn--block" id="btnCreateRoom" type="button">
+          创建房间
+        </button>
+
+        <div class="join-row">
+          <input
+            class="field field--code"
+            id="inputCode"
+            type="text"
+            inputmode="numeric"
+            maxlength="4"
+            placeholder="4 位房间码"
+            autocomplete="off"
+          />
+          <button class="btn" id="btnJoinRoom" type="button">加入房间</button>
         </div>
       </div>
 
-      <button class="btn btn--primary btn--block" id="btnStart" type="button">开始游戏</button>
       <button class="link-btn" id="btnRulesSetup" type="button">第一次玩？先看规则与牌型说明</button>
     </div>
   </div>
@@ -141,6 +186,35 @@
       <button class="btn btn--primary btn--block" id="btnAgain" type="button">再来一局</button>
       <button class="btn btn--ghost btn--block" id="btnBackHome" type="button">返回设置</button>
     </div>
+  </div>
+
+  <div class="modal" id="lobbyModal" hidden>
+    <div class="modal__card modal__card--tight">
+      <p class="modal__kicker">等待室</p>
+      <h2 class="modal__title modal__title--sm">
+        房间 <span class="room-code" id="lobbyCode">0000</span>
+      </h2>
+      <p class="modal__sub">把房间码发给朋友，2–4 人即可开始。</p>
+      <ul class="lobby-seats" id="lobbySeats"></ul>
+      <p class="lobby-hint" id="lobbyHint"></p>
+      <button class="btn btn--primary btn--block" id="btnLobbyStart" type="button">开始游戏</button>
+      <button class="btn btn--ghost btn--block" id="btnLobbyLeave" type="button">离开房间</button>
+    </div>
+  </div>
+
+  <div class="netbar" id="netbar" hidden>
+    <span class="netbar__dot"></span>
+    <span id="netbarText">连接中断，正在重连…</span>
+  </div>
+
+  <div class="feed" id="feed" aria-live="polite"></div>
+
+  <div class="phrases" id="phrases" hidden>
+    <div class="phrases__head">
+      <span>快捷短语</span>
+      <button class="icon-btn" id="btnPhrasesClose" type="button" aria-label="关闭">✕</button>
+    </div>
+    <div class="phrases__grid" id="phrasesGrid"></div>
   </div>
 
   <div class="toast" id="toast" hidden></div>
