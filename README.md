@@ -104,19 +104,17 @@ npm start
 
 和朋友在同一 WiFi 下玩：把 `localhost` 换成你电脑的局域网 IP（`ipconfig` 查看，形如 `192.168.1.5:3000`），对方用这个地址打开即可。Windows 首次可能会弹出防火墙提示，选择允许。
 
-## 公网部署
+## 让朋友在别处也能玩
 
-想让朋友不在同一个 WiFi 也能玩，需要把服务放到公网。仓库已内置 Render 的一键部署配置，步骤见 **[docs/deploy.md](docs/deploy.md)**。
+想让朋友不在同一个 WiFi 也能玩，得让这台服务在公网上有个地址。三种方式，完整步骤见 **[docs/deploy.md](docs/deploy.md)**：
 
-简要流程：
+| 方案 | 成本 | 说明 |
+| --- | --- | --- |
+| 同一 WiFi | 0 | `npm start` 后让朋友访问 `http://你的局域网IP:3000` |
+| 公网隧道 | 0 | 用 `cloudflared` 把本地服务临时暴露成公网地址，一条命令 |
+| Railway | ~$5/月 | 部署到云端长期在线，仓库里的 `Dockerfile` 可直接用 |
 
-1. 用 GitHub 账号登录 [render.com](https://render.com)
-2. Dashboard → **New +** → **Blueprint** → 选本仓库 → **Apply**
-3. 等 2–4 分钟，拿到形如 `https://uno-game-xxxx.onrender.com` 的地址，发给朋友即可
-
-`render.yaml` 里已配好构建命令、启动命令、健康检查路径 `/healthz` 和新加坡节点。之后每次 `git push` 会自动重新部署。
-
-> 免费套餐的实例闲置 15 分钟会休眠，下次打开需要 30–60 秒冷启动；重启会清空所有房间。这些限制和应对办法写在部署文档里。
+> 已实测：**Render 在部分网络下无法访问**（连接超时），**Zeabur 已公告 2026-12-31 停止运营**，这两个别用。仓库里的 `render.yaml` 保留备用。
 
 ## 测试
 
