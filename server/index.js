@@ -30,8 +30,12 @@ const MIME = {
   '.woff2': 'font/woff2',
 };
 
-/** 心跳间隔：清理已经断网但没触发 close 的僵尸连接 */
-const HEARTBEAT_MS = 30_000;
+/**
+ * 心跳间隔：清理已经断网但没触发 close 的僵尸连接。
+ * 换网络时旧 TCP 常常既不报错也不发 FIN，只能靠"上轮 ping 没回"来判定，
+ * 所以这个间隔决定了服务端多久能发现有人其实已经不在了。
+ */
+const HEARTBEAT_MS = 20_000;
 
 function sendText(res, status, text) {
   res.writeHead(status, { 'content-type': 'text/plain; charset=utf-8' });

@@ -155,6 +155,8 @@ export class RoomManager {
       started: false,
       game: null,
       gameSeats: [],
+      /** 第几局，用来区分"这局的人"和结算后才进来的新人 */
+      round: 0,
       hostSeat: 0,
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -181,8 +183,14 @@ export class RoomManager {
       this.#error(connection, '房间不存在，检查一下房间码');
       return;
     }
-    if (room.started) {
+    // 只有"打到一半"才挡人；结算完的房间随时可以进（下一局还要凑人）
+    if (this.#isLive(room)) {
       this.#error(connection, '这局已经开始了，等他们打完再来');
+      return;
+    }
+    // 上一局托管掉的座位不该继续占位，否则新人会看到"房间已满"
+    if (this.#pruneAbandoned(room)) {
+      this.#error(connection, '房间不存在，检查一下房间码');
       return;
     }
     if (room.players.length >= this.config.maxPlayers) {
@@ -263,10 +271,15 @@ export class RoomManager {
 
   #startGame(room) {
     const occupants = [...room.players].sort((a, b) => a.seat - b.seat);
+    room.round += 1;
     room.game = createGame({ players: occupants.map((item) => ({ name: item.name })) });
     room.gameSeats = occupants.map((item) => item.seat);
     room.started = true;
     room.updatedAt = Date.now();
+
+    // 记住谁参加了这一局：结算后新人可能顶到同一个座位号，
+    // 不能让他继承上一局的手牌视图
+    for (const player of occupants) player.roundId = room.round;
 
     this.#broadcastRoom(room);
     this.#broadcastState(room);
@@ -293,6 +306,14 @@ export class RoomManager {
     if (active.length < this.config.minPlayers) {
       this.#error(connection, '在线玩家不足，无法再来一局');
       return;
+    }
+
+    // 被剔除的座位要连带清掉令牌，否则会留下指向不存在玩家的会话
+    for (const player of room.players) {
+      if (player.abandoned) {
+        clearTimeout(player.reserveTimer);
+        this.sessions.delete(player.token);
+      }
     }
 
     room.players = active;
@@ -332,15 +353,19 @@ export class RoomManager {
     this.sockets.delete(connection);
     this.sessions.delete(player.token);
 
-    if (room.started && room.game) {
-      // 对局中退出不打断其他人，直接交给系统托管
+    if (this.#isLive(room)) {
+      // 对局进行中退出不打断其他人，直接交给系统托管
       player.abandoned = true;
       player.connected = false;
       player.connection = null;
+      // 房主托管后必须交权，否则这局打完没人能开下一局
+      this.#reassignHost(room);
       this.#notice(room, `${player.name} 离开了对局，已托管`);
+      this.#broadcastRoom(room);
       this.#broadcastState(room);
       this.#maybeAutoPlay(room);
     } else {
+      // 结算完（或还没开局）离开就是真离开，房间该散就散
       this.#removePlayer(room, player, `${player.name} 离开了房间`);
     }
 
@@ -483,11 +508,13 @@ export class RoomManager {
     player.reserveTimer = null;
     if (player.connected) return;
 
-    if (room.started && room.game) {
+    if (this.#isLive(room)) {
       // 对局中不清座：改成系统托管，让其他人能继续打下去
       player.abandoned = true;
       player.connected = false;
+      this.#reassignHost(room);
       this.#notice(room, `${player.name} 没有回来，已由系统托管`);
+      this.#broadcastRoom(room);
       this.#broadcastState(room);
       this.#maybeAutoPlay(room);
       return;
@@ -504,23 +531,68 @@ export class RoomManager {
     this.sessions.delete(player.token);
     room.updatedAt = Date.now();
 
-    // 房主离开后把权限交给剩下座位最靠前的人
-    if (player.isHost) {
-      player.isHost = false;
-      const next = [...room.players].sort((a, b) => a.seat - b.seat)[0];
-      if (next) {
-        next.isHost = true;
-        room.hostSeat = next.seat;
-      }
-    }
-
     if (room.players.length === 0) {
       this.#destroyRoom(room);
       return;
     }
 
+    // 房主离开后把权限交给剩下座位最靠前的人
+    this.#reassignHost(room);
+
     this.#broadcastRoom(room);
     if (noticeText) this.#notice(room, noticeText);
+  }
+
+  /* ------------------------------ 房间状态判定 ------------------------------ */
+
+  /** 对局是否正在进行。结算完之后房间就回到"可进可出"的普通状态 */
+  #isLive(room) {
+    return Boolean(room.started && room.game && room.game.phase !== PHASE.FINISHED);
+  }
+
+  /**
+   * 把房主权限交给在场的人。
+   *
+   * 只处理"原房主已经不在了"的情况：托管中的座位不能再当房主，
+   * 否则整局打完没人有权限开下一局、也没人能踢人，房间就废了。
+   * 掉线但还在保留期的座位不动，他可能马上就回来。
+   */
+  #reassignHost(room) {
+    const current = room.players.find((item) => item.isHost);
+    if (current && !current.abandoned) return;
+
+    const next = [...room.players]
+      .filter((item) => !item.abandoned)
+      .sort((a, b) => a.seat - b.seat)[0];
+    if (!next) return;
+
+    for (const item of room.players) item.isHost = item === next;
+    room.hostSeat = next.seat;
+  }
+
+  /**
+   * 清掉已托管的僵尸座位，让房间能重新接纳玩家。
+   * @returns {boolean} 房间是否因此被销毁
+   */
+  #pruneAbandoned(room) {
+    const stale = room.players.filter((item) => item.abandoned);
+    if (stale.length === 0) return false;
+
+    for (const player of stale) {
+      clearTimeout(player.reserveTimer);
+      player.reserveTimer = null;
+      this.sessions.delete(player.token);
+    }
+    room.players = room.players.filter((item) => !item.abandoned);
+
+    if (room.players.length === 0) {
+      this.#destroyRoom(room);
+      return true;
+    }
+
+    this.#reassignHost(room);
+    this.#broadcastRoom(room);
+    return false;
   }
 
   #destroyRoom(room) {
@@ -554,6 +626,8 @@ export class RoomManager {
       abandoned: false,
       isHost,
       reserveTimer: null,
+      /** 打过房间的第几局，0 表示还没参与过任何一局 */
+      roundId: 0,
     };
   }
 
@@ -606,6 +680,8 @@ export class RoomManager {
 
   #stateFor(room, player) {
     if (!room.game) return null;
+    // 没参加这一局的人（结算后才进来的新人）不给看残局
+    if (player.roundId !== room.round) return null;
     const index = room.gameSeats.indexOf(player.seat);
     if (index < 0) return null;
     return {

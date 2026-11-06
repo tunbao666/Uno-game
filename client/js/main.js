@@ -145,6 +145,10 @@ function startLocalGame() {
   ui.lobbyModal.hidden = true;
 
   setModeChrome('local');
+  // 单机也要能中途走人：不然只能硬着头皮打完这一局
+  ui.btnRestart.hidden = false;
+  ui.btnLeaveRoom.hidden = false;
+  ui.btnLeaveRoom.textContent = '离开牌局';
   setStageIdle(false);
   view.reset();
 
@@ -178,7 +182,8 @@ function ensureOnline() {
       ui.lobbyCode.textContent = payload.code;
       ui.roomChipCode.textContent = payload.code;
 
-      if (payload.started) {
+      // 没有牌局视角说明这局不是他打的（结算之后才进来），送进等待室等下一局
+      if (payload.started && payload.state) {
         enterGameChrome();
       } else {
         enterLobbyChrome();
@@ -194,7 +199,9 @@ function ensureOnline() {
 
     onRoom: (room) => {
       updateLobby(room);
-      if (room.started) {
+      // 手里有牌局视角的才留在牌桌；结算之后才进来的新人在等待室等下一局
+      const inTable = Boolean(online?.getState());
+      if (room.started && inTable) {
         ui.lobbyModal.hidden = true;
         enterGameChrome();
       } else {
@@ -208,6 +215,9 @@ function ensureOnline() {
       finishHandled = false;
       enterGameChrome();
       ui.lobbyModal.hidden = true;
+      // 房主开了下一局，手里的结算弹窗必须收掉，否则它挡着牌桌谁也点不了。
+      // 结束态不动弹窗：断线重连回到结算画面时还要靠它提供"再来一局"。
+      if (state.phase !== PHASE.FINISHED) ui.overModal.hidden = true;
       view.render(state, seat);
     },
 
@@ -272,6 +282,7 @@ function enterGameChrome() {
   ui.btnPhrases.hidden = false;
   ui.btnRestart.hidden = true;
   ui.btnLeaveRoom.hidden = false;
+  ui.btnLeaveRoom.textContent = '离开房间';
 }
 
 /** 等待室：还没有牌桌可看，只保留房间相关操作 */
@@ -282,6 +293,7 @@ function enterLobbyChrome() {
   ui.btnPhrases.hidden = true;
   ui.btnRestart.hidden = true;
   ui.btnLeaveRoom.hidden = false;
+  ui.btnLeaveRoom.textContent = '离开房间';
 }
 
 /** 没在牌局里时把空牌桌藏起来，避免弹窗背后露出一张空桌子 */
@@ -292,15 +304,33 @@ function setStageIdle(idle) {
 function setModeChrome(mode) {
   if (mode === 'online') {
     enterLobbyChrome();
-  } else {
-    setStageIdle(true);
-    ui.brandSub.textContent = '单机 · 人机对战';
-    ui.roomChip.hidden = true;
-    ui.btnPhrases.hidden = true;
-    ui.btnRestart.hidden = false;
-    ui.btnLeaveRoom.hidden = true;
-    ui.phrases.hidden = true;
+    return;
   }
+  // 回到设置页：牌局相关按钮全部收起，由各流程自己按需打开
+  setStageIdle(true);
+  ui.brandSub.textContent = '单机 · 人机对战';
+  ui.roomChip.hidden = true;
+  ui.btnPhrases.hidden = true;
+  ui.btnRestart.hidden = true;
+  ui.btnLeaveRoom.hidden = true;
+  ui.phrases.hidden = true;
+}
+
+/** 单机中途退出：丢掉当前对局，回到设置页 */
+function leaveLocal({ silent = false } = {}) {
+  game?.dispose();
+  game = null;
+  finishHandled = false;
+  pendingWildCard = null;
+
+  ui.overModal.hidden = true;
+  ui.colorModal.hidden = true;
+  view.reset();
+
+  setModeChrome('local');
+  ui.setupModal.hidden = false;
+
+  if (!silent) notify('已离开牌局');
 }
 
 function leaveOnline({ silent = false } = {}) {
@@ -493,7 +523,13 @@ ui.inputCode.addEventListener('input', () => {
 
 ui.btnLobbyStart.addEventListener('click', () => online?.start());
 ui.btnLobbyLeave.addEventListener('click', () => leaveOnline());
-ui.btnLeaveRoom.addEventListener('click', () => leaveOnline());
+ui.btnLeaveRoom.addEventListener('click', () => {
+  if (online) {
+    leaveOnline();
+    return;
+  }
+  leaveLocal();
+});
 
 ui.btnPhrases.addEventListener('click', () => {
   buildPhrases();
@@ -518,10 +554,7 @@ ui.btnBackHome.addEventListener('click', () => {
     leaveOnline();
     return;
   }
-  if (game) game.dispose();
-  game = null;
-  setStageIdle(true);
-  ui.setupModal.hidden = false;
+  leaveLocal({ silent: true });
 });
 
 /* -------------------------------- 选色 -------------------------------- */

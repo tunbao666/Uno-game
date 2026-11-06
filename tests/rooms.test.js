@@ -336,3 +336,143 @@ test('房间数达到上限时拒绝新建，避免被脚本刷爆内存', () =>
 
   manager.close();
 });
+
+/* ---------------------- 对局结束后的房间生命周期 ---------------------- */
+
+/** 把进行中的对局直接推到结算态，省去把牌打完的时间 */
+function finishGame(manager, code) {
+  const room = manager.rooms.get(code);
+  room.game.phase = PHASE.FINISHED;
+  room.game.winnerId = room.game.players[0].id;
+  return room;
+}
+
+test('对局结束后离开房间是直接退场，不会变成托管占座', () => {
+  const { manager, connect } = setup();
+  const { hostConn, code, others } = createRoom(manager, connect, { players: 2 });
+  manager.handle(hostConn, JSON.stringify({ t: 'start' }));
+  finishGame(manager, code);
+
+  manager.handle(others[0], JSON.stringify({ t: 'leave' }));
+
+  const room = manager.rooms.get(code);
+  assert.equal(room.players.length, 1, '结算后离开应当立即释放座位');
+  assert.equal(
+    room.players.some((player) => player.abandoned),
+    false,
+    '结算后离开不该留下托管标记',
+  );
+
+  manager.close();
+});
+
+test('对局结束后用同一房间码可以重新加入，且看不到托管标记', () => {
+  const { manager, connect } = setup();
+  const { hostConn, code, others } = createRoom(manager, connect, { players: 2 });
+  manager.handle(hostConn, JSON.stringify({ t: 'start' }));
+  finishGame(manager, code);
+
+  manager.handle(others[0], JSON.stringify({ t: 'leave' }));
+
+  const back = connect();
+  manager.handle(back, JSON.stringify({ t: 'join', code, name: '玩家2' }));
+
+  const joined = back.last('joined');
+  assert.ok(joined, '结算后应当允许重新加入');
+  assert.equal(joined.players.length, 2);
+  assert.equal(
+    joined.players.some((player) => player.abandoned),
+    false,
+    '重新加入不该看到自己或别人处于托管',
+  );
+
+  manager.close();
+});
+
+test('对局进行中房主离开：座位转托管，房主权限交给留下的人', () => {
+  const { manager, connect } = setup();
+  const { hostConn, code, others } = createRoom(manager, connect, { players: 2 });
+  manager.handle(hostConn, JSON.stringify({ t: 'start' }));
+
+  manager.handle(hostConn, JSON.stringify({ t: 'leave' }));
+
+  const room = manager.rooms.get(code);
+  assert.equal(room.players.length, 2, '对局中不能删座位，否则牌局人数对不上');
+  assert.ok(
+    room.players.some((player) => player.abandoned),
+    '离开者应转为托管',
+  );
+
+  const host = room.players.find((player) => player.isHost);
+  assert.equal(host?.seat, 1, '房主权限必须转给还在场的玩家');
+  assert.equal(room.hostSeat, 1);
+
+  // 留下的人已经是房主了：他对未结束的对局点再来一局，报的应该是"还没结束"
+  // 而不是"只有房主"——这正好证明权限已经转移
+  manager.handle(others[0], JSON.stringify({ t: 'again' }));
+  assert.match(others[0].last('error').message, /还没结束/);
+
+  manager.close();
+});
+
+test('最后一个人离开后房间被销毁，房间码随即失效', () => {
+  const { manager, connect } = setup();
+  const { hostConn, code, others } = createRoom(manager, connect, { players: 2 });
+  manager.handle(hostConn, JSON.stringify({ t: 'start' }));
+  finishGame(manager, code);
+
+  manager.handle(hostConn, JSON.stringify({ t: 'leave' }));
+  manager.handle(others[0], JSON.stringify({ t: 'leave' }));
+
+  assert.equal(manager.rooms.has(code), false, '没人了就该销毁房间');
+
+  const late = connect();
+  manager.handle(late, JSON.stringify({ t: 'join', code, name: '迟到的人' }));
+  assert.match(late.last('error').message, /房间不存在/);
+
+  manager.close();
+});
+
+test('对局结束后托管的座位会被回收，新玩家能顶上来', async () => {
+  const { manager, connect } = setup({ maxPlayers: 2, reserveMs: 60 });
+  const { hostConn, code, others } = createRoom(manager, connect, { players: 2 });
+  manager.handle(hostConn, JSON.stringify({ t: 'start' }));
+
+  // 第二个人掉线并等到座位转托管，此时房间已经被"满员"占住
+  others[0].emit('close');
+  await sleep(140);
+  finishGame(manager, code);
+
+  const late = connect();
+  manager.handle(late, JSON.stringify({ t: 'join', code, name: '新人' }));
+
+  const joined = late.last('joined');
+  assert.ok(joined, '托管座位应当先被回收，再接纳新玩家');
+  assert.equal(joined.players.length, 2);
+  assert.equal(
+    joined.players.some((player) => player.abandoned),
+    false,
+    '新人进来看不到残留的托管座位',
+  );
+
+  manager.close();
+});
+
+test('再来一局剔除托管玩家时同步清掉令牌，不留死会话', async () => {
+  const { manager, connect } = setup({ reserveMs: 60 });
+  const { hostConn, code, others } = createRoom(manager, connect, { players: 3 });
+  manager.handle(hostConn, JSON.stringify({ t: 'start' }));
+
+  const staleToken = others[0].last('joined').token;
+  others[0].emit('close');
+  await sleep(140);
+  finishGame(manager, code);
+
+  manager.handle(hostConn, JSON.stringify({ t: 'again' }));
+
+  const room = manager.rooms.get(code);
+  assert.equal(room.players.length, 2, '托管玩家不参与下一局');
+  assert.equal(manager.sessions.has(staleToken), false, '被剔除的座位不能留下令牌');
+
+  manager.close();
+});

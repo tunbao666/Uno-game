@@ -12,7 +12,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createUnoServer } from '../server/index.js';
-import { getPlayableCards, getTopCard } from '../shared/rules.js';
+import { PHASE, getPlayableCards, getTopCard } from '../shared/rules.js';
 
 /** 把 WebSocket 包成"按类型取消息"的小工具，避免测试里到处写回调 */
 function wrap(ws) {
@@ -193,4 +193,86 @@ test('房间不存在时返回可读错误而不是断线', async (t) => {
   assert.equal(ws.readyState, WebSocket.OPEN, '报错不应断开连接');
 
   ws.close();
+});
+
+test('结算后离开再重进：座位当场释放，不会顶着托管标记', async (t) => {
+  const app = createUnoServer({ reserveMs: 500, autoPlayDelay: 20 });
+  const address = await app.listen(0);
+
+  t.after(async () => {
+    await app.close();
+  });
+
+  const { ws: wsA, client: a } = await openClient(address.port);
+  a.send({ t: 'create', name: '房主' });
+  const joinedA = await a.next('joined');
+
+  const { ws: wsB, client: b } = await openClient(address.port);
+  b.send({ t: 'join', code: joinedA.code, name: '朋友' });
+  await b.next('joined');
+
+  a.send({ t: 'start' });
+  await a.next('state');
+  await b.next('state');
+
+  // 直接把对局推到结算态，省去把牌打完的时间
+  app.manager.rooms.get(joinedA.code).game.phase = PHASE.FINISHED;
+
+  b.send({ t: 'leave' });
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  wsB.close();
+
+  // 同一个房间码再进一次
+  const { ws: wsB2, client: b2 } = await openClient(address.port);
+  b2.send({ t: 'join', code: joinedA.code, name: '朋友' });
+  const rejoined = await b2.next('joined');
+
+  assert.equal(rejoined.seat, 1, '应当拿回原来那个空出来的座位');
+  assert.equal(rejoined.players.length, 2);
+  assert.equal(
+    rejoined.players.some((player) => player.abandoned),
+    false,
+    '重新进来不该看到"已托管"',
+  );
+  assert.equal(rejoined.state, null, '结算后才进来的人不该继承上一局的手牌视图');
+
+  wsB2.close();
+  wsA.close();
+});
+
+test('房主再来一局后，对手收到的是新局而不是结算态', async (t) => {
+  const app = createUnoServer({ reserveMs: 500, autoPlayDelay: 20 });
+  const address = await app.listen(0);
+
+  t.after(async () => {
+    await app.close();
+  });
+
+  const { ws: wsA, client: a } = await openClient(address.port);
+  a.send({ t: 'create', name: '房主' });
+  const joinedA = await a.next('joined');
+
+  const { ws: wsB, client: b } = await openClient(address.port);
+  b.send({ t: 'join', code: joinedA.code, name: '朋友' });
+  await b.next('joined');
+
+  a.send({ t: 'start' });
+  await a.next('state');
+  await b.next('state');
+
+  app.manager.rooms.get(joinedA.code).game.phase = PHASE.FINISHED;
+
+  a.send({ t: 'again' });
+
+  // 桌面必须真的复位：双方都拿到重新发牌的开局状态
+  const notFinished = (message) => message.t === 'state' && message.state.phase !== PHASE.FINISHED;
+  const nextA = await a.next(notFinished);
+  const nextB = await b.next(notFinished);
+
+  assert.equal(nextA.state.players[0].hand.length, 7, '房主应当拿到新一局的 7 张手牌');
+  assert.equal(nextB.state.players[0].hand, undefined, '对手仍然看不到别人的手牌');
+  assert.equal(nextB.state.players[1].hand.length, 7, '对手也应当拿到新一局的 7 张手牌');
+
+  wsB.close();
+  wsA.close();
 });
