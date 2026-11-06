@@ -1,0 +1,22 @@
+# Render Blueprint
+#
+# 仓库里存在这个文件时，Render 可以「一键」创建服务：不用手填构建命令、
+# 启动命令、端口，它照着读就行。
+#
+# 注意：本项目零第三方依赖，`npm install` 只是让 Render 走一遍标准流程，
+# 以后加了依赖也不用改这里。
+
+services:
+  - type: web
+    name: uno-game
+    runtime: node
+    plan: free
+    region: singapore # 离中国大陆最近的节点，延迟明显低于美西
+    branch: main
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true # 以后 git push，Render 自动重新部署
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
