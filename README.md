@@ -87,7 +87,9 @@ web_game/
 │  ├─ ws.js         最小 RFC6455 实现（零依赖）
 │  └─ rooms.js      房间、席位、房主权限、断线保留与托管
 ├─ tests/           规则引擎、房间逻辑、真实 WebSocket 端到端测试
-└─ docs/            规则文档与截图
+├─ docs/            规则文档、部署指南与截图
+├─ Dockerfile       通用容器镜像（Render 之外用）
+└─ render.yaml      Render 一键部署配置
 ```
 
 规则引擎与视图投影被前后端共同引用，因此单机与联机使用完全一致的判定逻辑，不存在“我这边显示能出、服务器说不行”的分裂。
@@ -102,6 +104,36 @@ npm start
 
 和朋友在同一 WiFi 下玩：把 `localhost` 换成你电脑的局域网 IP（`ipconfig` 查看，形如 `192.168.1.5:3000`），对方用这个地址打开即可。Windows 首次可能会弹出防火墙提示，选择允许。
 
+## 公网部署
+
+想让朋友不在同一个 WiFi 也能玩，需要把服务放到公网。仓库已内置 Render 的一键部署配置，步骤见 **[docs/deploy.md](docs/deploy.md)**。
+
+简要流程：
+
+1. 用 GitHub 账号登录 [render.com](https://render.com)
+2. Dashboard → **New +** → **Blueprint** → 选本仓库 → **Apply**
+3. 等 2–4 分钟，拿到形如 `https://uno-game-xxxx.onrender.com` 的地址，发给朋友即可
+
+`render.yaml` 里已配好构建命令、启动命令、健康检查路径 `/healthz` 和新加坡节点。之后每次 `git push` 会自动重新部署。
+
+> 免费套餐的实例闲置 15 分钟会休眠，下次打开需要 30–60 秒冷启动；重启会清空所有房间。这些限制和应对办法写在部署文档里。
+
+## 测试
+
+```bash
+npm test
+```
+
+85 项测试，零依赖（用 Node 内置的 `node:test`）：
+
+| 文件 | 覆盖内容 |
+| --- | --- |
+| `deck.test.js` | 108 张牌的数量、洗牌后牌数守恒、发牌不重复 |
+| `rules.test.js` | 出牌合法性、功能牌效果、回合流转 |
+| `integration.test.js` | 100 局自对弈压力测试，防止回合死循环 |
+| `rooms.test.js` | 建房、加入、人数校验、踢人、断线保留与托管、房间上限 |
+| `server.test.js` | 真实 WebSocket 连接下的完整对局流程 |
+
 ## 开发进度
 
 - [x] 初始化仓库
@@ -112,4 +144,6 @@ npm start
 - [x] 规则与牌型说明面板
 - [x] WebSocket 房间与联机对战
 - [x] 断线重连、托管、房主管理、快捷短语
-- [ ] 移动端适配收尾与公网部署指南
+- [x] 移动端适配收尾
+- [x] 公网部署配置与指南
+
